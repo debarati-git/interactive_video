@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Amplitude Modulation Simulation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      margin: 0;
+      background-color: #000;
+      color: #fff;
+    }
+
+    .sidebar {
+      width: 250px;
+      background-color: #333;
+      padding: 20px;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+      position: fixed;
+      left: 0;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      color: #fff;
+    }
+
+    .sidebar h2 {
+      font-size: 1.2em;
+      text-align: center;
+      margin: 10px 0;
+    }
+
+    .control-group {
+      margin-bottom: 20px;
+    }
+
+    .control-group h3 {
+      font-size: 1em;
+      text-align: left;
+      margin-bottom: 10px;
+      color: #fff;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .slider-row label {
+      font-size: 0.9em;
+      flex: 1;
+      margin-right: 10px;
+    }
+
+    .slider-row input[type="range"] {
+      flex: 2;
+    }
+
+    .slider-value {
+      font-size: 0.9em;
+      margin-left: 10px;
+      width: 50px;
+      text-align: right;
+    }
+
+    .reset-button, .toggle-button {
+      background-color: #007bff;
+      color: #fff;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 80%;
+      text-align: center;
+      margin: 10px auto;
+      display: block;
+    }
+
+    .reset-button:hover, .toggle-button:hover {
+      background-color: #0056b3;
+    }
+
+    .simulation-card {
+      margin-left: 270px;
+      max-width: 700px;
+      background-color: #1e1e1e;
+      border-radius: 15px;
+      padding: 20px;
+      box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5);
+      text-align: center;
+    }
+
+    .simulation-card h1 {
+      color: #fff;
+    }
+
+    .wave-container {
+      margin-bottom: 20px;
+    }
+
+    canvas {
+      border: 1px solid #ccc;
+      background-color: #000;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar for Controls -->
+  <div class="sidebar">
+    <h2>Controls</h2>
+
+    <!-- Modulating Signal Controls -->
+    <div class="control-group">
+      <h3>Modulating Signal</h3>
+      <div class="slider-row">
+        <label for="modulatingAmplitude">Amplitude</label>
+        <input type="range" id="modulatingAmplitude" min="10" max="60" value="40" oninput="updateSliderValue('modulatingAmplitudeValue', this.value)">
+        <span id="modulatingAmplitudeValue" class="slider-value">40</span>
+      </div>
+      <div class="slider-row">
+        <label for="modulatingFrequency">Frequency</label>
+        <input type="range" id="modulatingFrequency" min="0.5" max="5" step="0.1" value="1" oninput="updateSliderValue('modulatingFrequencyValue', this.value, 'Hz')">
+        <span id="modulatingFrequencyValue" class="slider-value">1 (Hz)</span>
+      </div>
+    </div>
+
+    <!-- Carrier Signal Controls -->
+    <div class="control-group">
+      <h3>Carrier Signal</h3>
+      <div class="slider-row">
+        <label for="carrierAmplitude">Amplitude</label>
+        <input type="range" id="carrierAmplitude" min="10" max="40" value="20" oninput="updateSliderValue('carrierAmplitudeValue', this.value)">
+        <span id="carrierAmplitudeValue" class="slider-value">20</span>
+      </div>
+      <div class="slider-row">
+        <label for="carrierFrequency">Frequency</label>
+        <input type="range" id="carrierFrequency" min="5" max="20" step="0.5" value="10" oninput="updateSliderValue('carrierFrequencyValue', this.value, 'Hz')">
+        <span id="carrierFrequencyValue" class="slider-value">10 (Hz)</span>
+      </div>
+    </div>
+
+    <button class="reset-button" onclick="resetSliders()">Reset</button>
+    <button class="toggle-button" onclick="toggleAnimation()">Stop Animation</button>
+  </div>
+
+  <!-- Simulation Display in Card Style -->
+  <div class="simulation-card">
+    <h1>Interactive Amplitude Modulation Simulation</h1>
+
+    <!-- Modulating Signal -->
+    <div class="wave-container">
+      <h2>Modulating Signal</h2>
+      <canvas id="modulatingSignal" width="600" height="100"></canvas>
+    </div>
+    
+    <!-- Carrier Signal -->
+    <div class="wave-container">
+      <h2>Carrier Wave</h2>
+      <canvas id="carrierWave" width="600" height="100"></canvas>
+    </div>
+    
+    <!-- Amplitude Modulated Signal -->
+    <div class="wave-container">
+      <h2>Amplitude Modulated Signal</h2>
+      <canvas id="amplitudeModulatedSignal" width="600" height="100"></canvas>
+    </div>
+  </div>
+
+  <script>
+    let time = 0;
+    const speed = 1;
+    let animationRunning = true;
+    let animationFrameId;
+
+    // Get canvas contexts
+    const modulatingContext = document.getElementById('modulatingSignal').getContext('2d');
+    const carrierContext = document.getElementById('carrierWave').getContext('2d');
+    const amContext = document.getElementById('amplitudeModulatedSignal').getContext('2d');
+
+    // Get control elements
+    const modulatingAmplitudeSlider = document.getElementById('modulatingAmplitude');
+    const modulatingFrequencySlider = document.getElementById('modulatingFrequency');
+    const carrierAmplitudeSlider = document.getElementById('carrierAmplitude');
+    const carrierFrequencySlider = document.getElementById('carrierFrequency');
+
+    // Reset slider values to defaults
+    function resetSliders() {
+      modulatingAmplitudeSlider.value = 40;
+      modulatingFrequencySlider.value = 1;
+      carrierAmplitudeSlider.value = 20;
+      carrierFrequencySlider.value = 10;
+
+      // Update displayed values
+      updateSliderValue('modulatingAmplitudeValue', 40);
+      updateSliderValue('modulatingFrequencyValue', 1, 'Hz');
+      updateSliderValue('carrierAmplitudeValue', 20);
+      updateSliderValue('carrierFrequencyValue', 10, 'Hz');
+    }
+
+    // Function to update the displayed slider value
+    function updateSliderValue(id, value, unit = '') {
+      document.getElementById(id).textContent = `${value} ${unit ? `(${unit})` : ''}`;
+    }
+
+    // Function to draw a moving sine wave
+    function drawSineWave(context, amplitude, frequency, color, phaseShift = 0) {
+      context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+      context.strokeStyle = color;
+      context.lineWidth = 2;
+      context.beginPath();
+
+      for (let x = 0; x < context.canvas.width; x++) {
+        const y = amplitude * Math.sin((2 * Math.PI * frequency * ((x + time * speed) / context.canvas.width) + phaseShift)) + context.canvas.height / 2;
+        x === 0 ? context.moveTo(x, y) : context.lineTo(x, y);
+      }
+      context.stroke();
+    }
+
+    // Function to draw amplitude-modulated wave with envelope
+    function drawAmplitudeModulatedWave(context, modulatingAmp, modulatingFreq, carrierAmp, carrierFreq) {
+      context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+      context.strokeStyle = 'orange';
+      context.lineWidth = 2;
+      context.beginPath();
+
+      let upperEnvelope = [];
+      let lowerEnvelope = [];
+
+      for (let x = 0; x < context.canvas.width; x++) {
+        const modulatingWave = modulatingAmp * Math.sin(2 * Math.PI * modulatingFreq * ((x + time * speed) / context.canvas.width));
+        const y = (carrierAmp + modulatingWave) * Math.sin(2 * Math.PI * carrierFreq * ((x + time * speed) / context.canvas.width)) + context.canvas.height / 2;
+        x === 0 ? context.moveTo(x, y) : context.lineTo(x, y);
+
+        // Calculate envelope points
+        upperEnvelope.push(context.canvas.height / 2 + carrierAmp + modulatingWave);
+        lowerEnvelope.push(context.canvas.height / 2 - (carrierAmp + modulatingWave));
+      }
+      context.stroke();
+
+      // Draw upper envelope in red dotted line
+      context.beginPath();
+      context.setLineDash([5, 5]);
+      context.strokeStyle = 'red';
+      for (let x = 0; x < context.canvas.width; x++) {
+        const y = upperEnvelope[x];
+        x === 0 ? context.moveTo(x, y) : context.lineTo(x, y);
+      }
+      context.stroke();
+
+      // Draw lower envelope in red dotted line
+      context.beginPath();
+      for (let x = 0; x < context.canvas.width; x++) {
+        const y = lowerEnvelope[x];
+        x === 0 ? context.moveTo(x, y) : context.lineTo(x, y);
+      }
+      context.stroke();
+      context.setLineDash([]); // Reset line style
+    }
+
+    // Function to toggle animation
+    function toggleAnimation() {
+      animationRunning = !animationRunning;
+      document.querySelector('.toggle-button').textContent = animationRunning ? "Stop Animation" : "Start Animation";
+      if (animationRunning) {
+        animate();
+      } else {
+        cancelAnimationFrame(animationFrameId);
+      }
+    }
+
+    // Animation function
+    function animate() {
+      if (animationRunning) {
+        time += speed;
+
+        // Draw modulating wave
+        drawSineWave(modulatingContext, parseFloat(modulatingAmplitudeSlider.value), parseFloat(modulatingFrequencySlider.value), 'cyan');
+        // Draw carrier wave
+        drawSineWave(carrierContext, parseFloat(carrierAmplitudeSlider.value), parseFloat(carrierFrequencySlider.value), 'purple');
+        // Draw amplitude-modulated wave with envelope
+        drawAmplitudeModulatedWave(amContext, parseFloat(modulatingAmplitudeSlider.value), parseFloat(modulatingFrequencySlider.value), parseFloat(carrierAmplitudeSlider.value), parseFloat(carrierFrequencySlider.value));
+
+        animationFrameId = requestAnimationFrame(animate);
+      }
+    }
+
+    animate();
+  </script>
+</body>
+</html>
