@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive QPSK Modulation Simulation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      margin: 0;
+      background-color: #000;
+      color: #fff;
+    }
+
+    .sidebar {
+      width: 250px;
+      background-color: #333;
+      padding: 20px;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+      position: fixed;
+      left: 0;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      color: #fff;
+    }
+
+    .sidebar h2 {
+      font-size: 1.2em;
+      text-align: center;
+      margin: 10px 0;
+    }
+
+    .control-group {
+      margin-bottom: 20px;
+    }
+
+    .control-group h3 {
+      font-size: 1em;
+      text-align: left;
+      margin-bottom: 10px;
+      color: #fff;
+    }
+
+    .slider-row, .input-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .slider-row label, .input-row label {
+      font-size: 0.9em;
+      flex: 1;
+      margin-right: 10px;
+    }
+
+    .slider-row input[type="range"], .input-row input[type="text"] {
+      flex: 2;
+    }
+
+    .slider-value {
+      font-size: 0.9em;
+      margin-left: 10px;
+      width: 50px;
+      text-align: right;
+    }
+
+    .reset-button, .toggle-button {
+      background-color: #007bff;
+      color: #fff;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 80%;
+      text-align: center;
+      margin: 10px auto;
+      display: block;
+    }
+
+    .reset-button:hover, .toggle-button:hover {
+      background-color: #0056b3;
+    }
+
+    .simulation-card {
+      margin-left: 270px;
+      max-width: 700px;
+      background-color: #1e1e1e;
+      border-radius: 15px;
+      padding: 20px;
+      box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5);
+      text-align: center;
+    }
+
+    .simulation-card h1 {
+      color: #fff;
+    }
+
+    .wave-container {
+      margin-bottom: 20px;
+    }
+
+    canvas {
+      border: 1px solid #ccc;
+      background-color: #000;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar for Controls -->
+  <div class="sidebar">
+    <h2>Controls</h2>
+
+    <!-- Message Signal Binary Pattern -->
+    <div class="control-group">
+      <h3>Message Signal</h3>
+      <div class="input-row">
+        <label for="binaryPattern">Binary Pattern</label>
+        <input type="text" id="binaryPattern" value="10110011" oninput="updateBinaryPattern()">
+      </div>
+    </div>
+
+    <!-- Carrier Signal Controls -->
+    <div class="control-group">
+      <h3>Carrier Signal</h3>
+      <div class="slider-row">
+        <label for="carrierAmplitude">Amplitude</label>
+        <input type="range" id="carrierAmplitude" min="10" max="40" value="30" oninput="updateSliderValue('carrierAmplitudeValue', this.value)">
+        <span id="carrierAmplitudeValue" class="slider-value">30</span>
+      </div>
+      <div class="slider-row">
+        <label for="carrierFrequency">Frequency</label>
+        <input type="range" id="carrierFrequency" min="5" max="15" step="0.5" value="10" oninput="updateSliderValue('carrierFrequencyValue', this.value, 'Hz')">
+        <span id="carrierFrequencyValue" class="slider-value">10 (Hz)</span>
+      </div>
+    </div>
+
+    <button class="reset-button" onclick="resetSliders()">Reset</button>
+    <button class="toggle-button" onclick="toggleAnimation()">Stop Animation</button>
+  </div>
+
+  <!-- Simulation Display in Card Style -->
+  <div class="simulation-card">
+    <h1>Interactive QPSK Modulation Simulation</h1>
+
+    <!-- Message Signal -->
+    <div class="wave-container">
+      <h2>Message Signal</h2>
+      <canvas id="messageSignal" width="600" height="100"></canvas>
+    </div>
+    
+    <!-- Carrier Signal -->
+    <div class="wave-container">
+      <h2>Carrier Signal</h2>
+      <canvas id="carrierSignal" width="600" height="100"></canvas>
+    </div>
+
+    <!-- QPSK Modulated Signal -->
+    <div class="wave-container">
+      <h2>QPSK Modulated Signal</h2>
+      <canvas id="qpskModulatedSignal" width="600" height="100"></canvas>
+    </div>
+  </div>
+
+  <script>
+    let time = 0;
+    const speed = 1;
+    let animationRunning = true;
+    let animationFrameId;
+
+    // Get canvas contexts
+    const messageContext = document.getElementById('messageSignal').getContext('2d');
+    const carrierContext = document.getElementById('carrierSignal').getContext('2d');
+    const qpskContext = document.getElementById('qpskModulatedSignal').getContext('2d');
+
+    // Get control elements
+    const binaryPatternInput = document.getElementById('binaryPattern');
+    const carrierAmplitudeSlider = document.getElementById('carrierAmplitude');
+    const carrierFrequencySlider = document.getElementById('carrierFrequency');
+
+    // Message signal: a binary string divided into two-bit symbols
+    let messageSignal = ["10", "11", "00", "11"]; // default two-bit symbols
+    const phaseShifts = {
+      "00": { shift: 0, label: "0°" },
+      "01": { shift: Math.PI / 2, label: "90°" },
+      "10": { shift: Math.PI, label: "180°" },
+      "11": { shift: (3 * Math.PI) / 2, label: "270°" }
+    };
+
+    // Adjusts bit duration dynamically based on sequence length
+    function calculateBitDuration() {
+      return 600 / (messageSignal.length * 2);
+    }
+
+    // Update message signal based on the binary pattern input
+    function updateBinaryPattern() {
+      const binaryString = binaryPatternInput.value.replace(/[^01]/g, ''); // Only keep 0s and 1s
+      messageSignal = binaryString.match(/.{1,2}/g) || []; // Split into two-bit symbols
+      drawMessageSignal(messageContext);
+      drawQpskModulatedSignal(qpskContext);
+    }
+
+    // Reset slider values to defaults
+    function resetSliders() {
+      binaryPatternInput.value = "10110011";
+      updateBinaryPattern();
+
+      carrierAmplitudeSlider.value = 30;
+      carrierFrequencySlider.value = 10;
+
+      updateSliderValue('carrierAmplitudeValue', 30);
+      updateSliderValue('carrierFrequencyValue', 10, 'Hz');
+    }
+
+    // Function to update the displayed slider value with unit in parentheses
+    function updateSliderValue(id, value, unit = '') {
+      document.getElementById(id).textContent = `${value} ${unit ? `(${unit})` : ''}`;
+    }
+
+    // Function to draw the message signal (binary 1s and 0s)
+    function drawMessageSignal(context) {
+      context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+      context.strokeStyle = 'white';
+      context.lineWidth = 2;
+      context.beginPath();
+      const bitDuration = calculateBitDuration();
+
+      for (let i = 0; i < messageSignal.length; i++) {
+        const x = i * bitDuration * 2;
+        const y = messageSignal[i] === "00" || messageSignal[i] === "10" ? 80 : 20;
+        context.moveTo(x, y);
+        context.lineTo(x + bitDuration * 2, y);
+        if (i < messageSignal.length - 1) {
+          context.lineTo(x + bitDuration * 2, messageSignal[i + 1] === "00" || messageSignal[i + 1] === "10" ? 80 : 20);
+        }
+      }
+      context.stroke();
+    }
+
+    // Function to draw the continuous carrier signal with independent amplitude and frequency
+    function drawCarrierSignal(context) {
+      const amplitude = parseFloat(carrierAmplitudeSlider.value);
+      const frequency = parseFloat(carrierFrequencySlider.value);
+      context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+      context.strokeStyle = 'green';
+      context.lineWidth = 2;
+      context.beginPath();
+
+      for (let x = 0; x < context.canvas.width; x++) {
+        const y = amplitude * Math.sin(2 * Math.PI * frequency * ((x + time * speed) / context.canvas.width)) + context.canvas.height / 2;
+        x === 0 ? context.moveTo(x, y) : context.lineTo(x, y);
+      }
+      context.stroke();
+    }
+
+    // Function to draw the QPSK modulated signal with annotations
+    function drawQpskModulatedSignal(context) {
+      const amplitude = parseFloat(carrierAmplitudeSlider.value);
+      const frequency = parseFloat(carrierFrequencySlider.value);
+      context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+      context.strokeStyle = 'blue';
+      context.lineWidth = 2;
+      context.font = "12px Arial";
+      context.fillStyle = 'white';
+      context.beginPath();
+      const bitDuration = calculateBitDuration();
+
+      for (let i = 0; i < messageSignal.length; i++) {
+        const { shift: phaseShift, label } = phaseShifts[messageSignal[i]] || { shift: 0, label: "0°" }; // Use the phase shift for the symbol
+        const startX = i * bitDuration * 2;
+        const endX = startX + bitDuration * 2;
+
+        // Draw phase-shifted signal
+        for (let x = startX; x < endX; x++) {
+          const y = amplitude * Math.sin(2 * Math.PI * frequency * ((x + time * speed) / context.canvas.width) + phaseShift) + context.canvas.height / 2;
+          x === startX ? context.moveTo(x, y) : context.lineTo(x, y);
+        }
+
+        // Draw label for phase shift and bit group
+        context.fillText(`${messageSignal[i]} (${label})`, startX + 5, context.canvas.height / 2 - 30);
+      }
+      context.stroke();
+    }
+
+    // Function to toggle animation
+    function toggleAnimation() {
+      animationRunning = !animationRunning;
+      document.querySelector('.toggle-button').textContent = animationRunning ? "Stop Animation" : "Start Animation";
+      if (animationRunning) {
+        animate();
+      } else {
+        cancelAnimationFrame(animationFrameId);
+      }
+    }
+
+    // Animation function
+    function animate() {
+      if (animationRunning) {
+        time += speed;
+
+        // Draw the message signal (binary)
+        drawMessageSignal(messageContext);
+        // Draw the carrier signal
+        drawCarrierSignal(carrierContext);
+        // Draw the QPSK modulated signal with annotations
+        drawQpskModulatedSignal(qpskContext);
+
+        animationFrameId = requestAnimationFrame(animate);
+      }
+    }
+
+    // Initialize with default pattern
+    updateBinaryPattern();
+    animate();
+  </script>
+</body>
+</html>

@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Interactive Sampling and Aliasing Simulation</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+      margin: 0;
+      background-color: #000;
+      color: #fff;
+    }
+
+    .sidebar {
+      width: 250px;
+      background-color: #333;
+      padding: 20px;
+      box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+      position: fixed;
+      left: 0;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      color: #fff;
+    }
+
+    .sidebar h2 {
+      font-size: 1.2em;
+      text-align: center;
+      margin: 10px 0;
+    }
+
+    .explanation {
+      font-size: 0.9em;
+      color: #ccc;
+      margin-bottom: 15px;
+    }
+
+    .control-group {
+      margin-bottom: 20px;
+    }
+
+    .control-group h3 {
+      font-size: 1em;
+      text-align: left;
+      margin-bottom: 10px;
+      color: #fff;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .slider-row label {
+      font-size: 0.9em;
+      flex: 1;
+      margin-right: 10px;
+    }
+
+    .slider-row input[type="range"] {
+      flex: 2;
+    }
+
+    .slider-value {
+      font-size: 0.9em;
+      margin-left: 10px;
+      width: 50px;
+      text-align: right;
+    }
+
+    .reset-button, .toggle-button {
+      background-color: #007bff;
+      color: #fff;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1em;
+      width: 80%;
+      text-align: center;
+      margin: 10px auto;
+      display: block;
+    }
+
+    .reset-button:hover, .toggle-button:hover {
+      background-color: #0056b3;
+    }
+
+    .simulation-card {
+      margin-left: 270px;
+      max-width: 700px;
+      background-color: #1e1e1e;
+      border-radius: 15px;
+      padding: 20px;
+      box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.5);
+      text-align: center;
+    }
+
+    .simulation-card h1 {
+      color: #fff;
+    }
+
+    .wave-container {
+      margin-bottom: 20px;
+    }
+
+    .alert {
+      color: red;
+      font-weight: bold;
+      font-size: 1em;
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    canvas {
+      border: 1px solid #ccc;
+      background-color: #000;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar for Controls and Explanation -->
+  <div class="sidebar">
+    <h2>Controls & Explanation</h2>
+    <p class="explanation">
+      <strong>Aliasing</strong> occurs when the sampling rate is less than twice the frequency of the original signal. This causes the sampled signal to appear at a lower frequency, distorting the signal representation.
+    </p>
+
+    <!-- Original Signal Frequency Control -->
+    <div class="control-group">
+      <h3>Original Signal</h3>
+      <div class="slider-row">
+        <label for="signalFrequency">Frequency</label>
+        <input type="range" id="signalFrequency" min="1" max="30" value="10" oninput="updateSliderValue('signalFrequencyValue', this.value, 'Hz')">
+        <span id="signalFrequencyValue" class="slider-value">10 (Hz)</span>
+      </div>
+    </div>
+
+    <!-- Sampling Rate Control -->
+    <div class="control-group">
+      <h3>Sampling Rate</h3>
+      <div class="slider-row">
+        <label for="samplingRate">Frequency</label>
+        <input type="range" id="samplingRate" min="1" max="60" value="20" oninput="updateSliderValue('samplingRateValue', this.value, 'Hz')">
+        <span id="samplingRateValue" class="slider-value">20 (Hz)</span>
+      </div>
+    </div>
+
+    <button class="reset-button" onclick="resetSliders()">Reset</button>
+    <button class="toggle-button" onclick="toggleAnimation()">Stop Animation</button>
+  </div>
+
+  <!-- Simulation Display in Card Style -->
+  <div class="simulation-card">
+    <h1>Interactive Sampling and Aliasing Simulation</h1>
+
+    <!-- Original Signal -->
+    <div class="wave-container">
+      <h2>Original Signal</h2>
+      <canvas id="originalSignal" width="600" height="100"></canvas>
+    </div>
+
+    <!-- Sampled Signal -->
+    <div class="wave-container">
+      <h2>Sampled Signal</h2>
+      <canvas id="sampledSignal" width="600" height="100"></canvas>
+    </div>
+
+    <!-- Aliasing Warning -->
+    <div id="aliasingAlert" class="alert"></div>
+  </div>
+
+  <script>
+    let time = 0;
+    const speed = 1;
+    let animationRunning = true;
+    let animationFrameId;
+
+    // Get canvas contexts
+    const originalContext = document.getElementById('originalSignal').getContext('2d');
+    const sampledContext = document.getElementById('sampledSignal').getContext('2d');
+
+    // Get control elements
+    const signalFrequencySlider = document.getElementById('signalFrequency');
+    const samplingRateSlider = document.getElementById('samplingRate');
+    const aliasingAlert = document.getElementById('aliasingAlert');
+
+    // Function to update displayed slider value with unit in parentheses
+    function updateSliderValue(id, value, unit = '') {
+      document.getElementById(id).textContent = `${value} ${unit ? `(${unit})` : ''}`;
+    }
+
+    // Reset slider values to defaults
+    function resetSliders() {
+      signalFrequencySlider.value = 10;
+      samplingRateSlider.value = 20;
+
+      updateSliderValue('signalFrequencyValue', 10, 'Hz');
+      updateSliderValue('samplingRateValue', 20, 'Hz');
+      aliasingAlert.textContent = ""; // Clear aliasing alert
+    }
+
+    // Function to check for aliasing condition
+    function checkAliasing(signalFrequency, samplingRate) {
+      if (samplingRate < 2 * signalFrequency) {
+        aliasingAlert.textContent = "Aliasing is occurring! Increase the sampling rate.";
+        return true;
+      } else {
+        aliasingAlert.textContent = ""; // Clear alert if no aliasing
+        return false;
+      }
+    }
+
+    // Function to draw the original continuous signal
+    function drawOriginalSignal(context) {
+      const frequency = parseFloat(signalFrequencySlider.value);
+      const amplitude = 30;
+      context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+      context.strokeStyle = 'green';
+      context.lineWidth = 2;
+      context.beginPath();
+
+      for (let x = 0; x < context.canvas.width; x++) {
+        const y = amplitude * Math.sin(2 * Math.PI * frequency * ((x + time * speed) / context.canvas.width)) + context.canvas.height / 2;
+        x === 0 ? context.moveTo(x, y) : context.lineTo(x, y);
+      }
+      context.stroke();
+    }
+
+    // Function to draw the sampled signal with aliasing effect
+    function drawSampledSignal(context) {
+      const signalFrequency = parseFloat(signalFrequencySlider.value);
+      const samplingRate = parseFloat(samplingRateSlider.value);
+      const amplitude = 30;
+      const sampleInterval = context.canvas.width / samplingRate; // Distance between samples
+      const isAliasing = checkAliasing(signalFrequency, samplingRate); // Check for aliasing
+
+      context.clearRect(0, 0, context.canvas.width, context.canvas.height);
+      context.strokeStyle = isAliasing ? 'orange' : 'blue'; // Change line color if aliasing occurs
+      context.lineWidth = 2;
+      context.beginPath();
+
+      let previousSampleY = null;
+      for (let i = 0; i < samplingRate; i++) {
+        const x = i * sampleInterval;
+        const y = amplitude * Math.sin(2 * Math.PI * signalFrequency * ((x + time * speed) / context.canvas.width)) + context.canvas.height / 2;
+        context.fillStyle = isAliasing ? 'orange' : 'red';
+        context.beginPath();
+        context.arc(x, y, 3, 0, 2 * Math.PI); // Draw sampled points
+        context.fill();
+
+        if (previousSampleY !== null) {
+          context.lineTo(x, y);
+        } else {
+          context.moveTo(x, y);
+        }
+        previousSampleY = y;
+      }
+      context.stroke();
+    }
+
+    // Function to toggle animation
+    function toggleAnimation() {
+      animationRunning = !animationRunning;
+      document.querySelector('.toggle-button').textContent = animationRunning ? "Stop Animation" : "Start Animation";
+      if (animationRunning) {
+        animate();
+      } else {
+        cancelAnimationFrame(animationFrameId);
+      }
+    }
+
+    // Animation function
+    function animate() {
+      if (animationRunning) {
+        time += speed;
+
+        // Draw the original signal
+        drawOriginalSignal(originalContext);
+        // Draw the sampled signal with aliasing effect
+        drawSampledSignal(sampledContext);
+
+        animationFrameId = requestAnimationFrame(animate);
+      }
+    }
+
+    // Initialize sliders and start animation
+    resetSliders();
+    animate();
+  </script>
+</body>
+</html>
